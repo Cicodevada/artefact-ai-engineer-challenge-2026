@@ -1,5 +1,6 @@
 import os
 import json
+from datetime import datetime
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -15,6 +16,10 @@ MODEL_ID = "gemma-4-26b-a4b-it" #Acabou o free do gemini 3.1 mas o gemma é sufi
 PROMPT_PASSO_1 = """
 Você é o Hugo Santos, vendedor da loja Empório da Música (loja exclusiva de instrumentos musicais em Campo Grande/MS).
 Seu tom de voz é informal, acolhedor e profissional, como um amigo que entende de música.
+
+REGRA DE CONTINUIDADE DA CONVERSA:
+- Você recebe todo o histórico da conversa com o horário de cada mensagem.
+- SÓ se apresente ("Oi, aqui é o Hugo", "Tudo bem?", etc.) se for a primeira mensagem da conversa ou se já tiver passado muito tempo desde a última mensagem. Se a conversa já estiver em andamento, continue o papo naturalmente sem se apresentar de novo.
 
 Neste primeiro passo, você deve analisar a mensagem do cliente e decidir quais funções chamar.
 IMPORTANTE: Você NUNCA sabe preços, estoque, pedidos ou detalhes das políticas de cabeça. Sempre que precisar de dados, chame as funções de busca e use `enviar_mensagem` apenas para avisar que vai conferir (ex: "Peraí que vou conferir aqui no sistema pra você!").
@@ -63,6 +68,19 @@ Exemplo 3 (Cliente pergunta "Qual o endereço e horário da loja?"):
 [{"funcao": "get_politicas", "parametro": "sobre"}, {"funcao": "get_politicas", "parametro": "horario"}]
 """
 
+PROMPT_PASSO_2 = """
+Você é o Hugo Santos, vendedor da loja Empório da Música (loja exclusiva de instrumentos musicais).
+Seu tom de voz é informal, acolhedor e profissional, como um amigo que entende de música.
+
+Responda ao cliente utilizando APENAS os dados retornados pelas funções do sistema que estão abaixo.
+Regras importantes para a sua resposta:
+- CONTINUIDADE: Olhe o histórico da conversa e os horários das mensagens. SÓ se apresente ("Fala, tudo bem? Aqui é o Hugo...") se for a primeira mensagem da conversa ou se a última mensagem fizer muito tempo. Se vocês já estão conversando (ou se você já mandou uma mensagem agora pouco dizendo que ia conferir os dados), vá direto ao ponto de forma natural, sem dar "oi" ou se apresentar novamente.
+- Nunca invente preços, estoque, promoções, status de pedidos ou políticas que não estejam nos dados.
+- Em produtos: verifique sempre o 'status' (active, discontinued, coming_soon) e a quantidade em 'stock_quantity'. Se estiver sem estoque (0) ou descontinuado, avise o cliente e sugira alternativas disponíveis que vieram nos dados.
+- Em promoções: considere APENAS promoções onde 'is_active' seja '1'. Se 'is_active' for '0', a promoção já expirou (avise com transparência caso o cliente tenha perguntado dela e informe o preço normal). Quando houver promoção ativa ('is_active' == '1'), mostre o preço original, o percentual de desconto e o preço final com desconto. Lembre-se que o desconto de 5% no PIX não acumula com promoções.
+- A loja vende exclusivamente instrumentos musicais (não vendemos acessórios como cordas, cabos, palhetas, cases, pedais ou amplificadores).
+"""
+
 def main():
     print("=== Atendimento Empório da Música (Digite 'sair' para encerrar) ===\n")
     
@@ -82,6 +100,9 @@ def main():
             print("Encerrando atendimento...")
             break
 
+        horario_msg = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        mensagem_cliente = f"[{horario_msg}] Cliente: {mensagem_cliente}"
+
         historico.append(
             types.Content(
                 role="user",
@@ -97,14 +118,16 @@ def main():
                 config=types.GenerateContentConfig(
                     system_instruction=PROMPT_PASSO_1,
                     temperature=0.0,
-                    response_mime_type="application/json",
                 )
             )
 
-            funcoes_para_chamar = response_passo_1.text
+            funcoes_para_chamar = response_passo_1.text.strip()
+            if funcoes_para_chamar.startswith("```"):
+                funcoes_para_chamar = funcoes_para_chamar.replace("```json", "").replace("```", "").strip()
+
             acoes = json.loads(funcoes_para_chamar)
 
-            print(f"\n[Passo 1] Hugo (Empório da Música): {acoes}")
+            # print(f"\n[Passo 1] Hugo (Empório da Música): {acoes}")
 
             mapa_funcoes = {
                 "get_politicas": get_politicas,
@@ -118,20 +141,65 @@ def main():
                 nome_funcao = acao.get("funcao")
                 parametro = acao.get("parametro", "")
 
-                if nome_funcao == "enviar_mensagem":
+                if nome_funcao == "enviar_mensagem" and parametro:
                     print(f"\nHugo (Empório da Música): {parametro}\n")
+                    horario_resp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                    historico.append(
+                        types.Content(
+                            role="model",
+                            parts=[types.Part.from_text(text=f"[{horario_resp}] Hugo: {parametro}")]
+                        )
+                    )
                 elif nome_funcao in mapa_funcoes:
                     print(f" -> [Sistema] Executando: {nome_funcao}('{parametro}')")
                     resultado = mapa_funcoes[nome_funcao](parametro)
                     dados_retornados[f"{nome_funcao}({parametro})"] = resultado
-                    print(f" -> [Sistema] Dados retornados de {nome_funcao}('{parametro}'):\n{resultado}\n")
+                    # print(f" -> [Sistema] Dados retornados de {nome_funcao}('{parametro}'):\n{resultado}\n")
 
-            historico.append(
-                types.Content(
-                    role="model",
-                    parts=[types.Part.from_text(text=funcoes_para_chamar)]
+            # Passo 2: Se buscou dados nas funções, monta a resposta final com base neles
+            if len(dados_retornados) > 0:
+                texto_dados = json.dumps(dados_retornados, ensure_ascii=False, indent=2)
+                horario_sistema = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                prompt_com_dados = (
+                    f"[{horario_sistema}] Dados retornados pelas funções do sistema para responder à mensagem do cliente ({mensagem_cliente}):\n"
+                    f"{texto_dados}\n\n"
+                    f"Agora dê a resposta ao cliente com base apenas nesses dados e mantendo a continuidade da conversa."
                 )
-            )
+
+                conteudos_passo_2 = list(historico)
+                if conteudos_passo_2[-1].role == "user":
+                    conteudos_passo_2.append(
+                        types.Content(
+                            role="model",
+                            parts=[types.Part.from_text(text="Consultando dados no sistema...")]
+                        )
+                    )
+                conteudos_passo_2.append(
+                    types.Content(
+                        role="user",
+                        parts=[types.Part.from_text(text=prompt_com_dados)]
+                    )
+                )
+
+                response_passo_2 = client.models.generate_content(
+                    model=MODEL_ID,
+                    contents=conteudos_passo_2,
+                    config=types.GenerateContentConfig(
+                        system_instruction=PROMPT_PASSO_2,
+                        temperature=0.2,
+                    )
+                )
+
+                resposta_final = response_passo_2.text
+                print(f"\nHugo (Empório da Música): {resposta_final}\n")
+
+                horario_final = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                historico.append(
+                    types.Content(
+                        role="model",
+                        parts=[types.Part.from_text(text=f"[{horario_final}] Hugo: {resposta_final}")]
+                    )
+                )
 
         except Exception as e:
             print(f"\n[Erro na chamada da API]: {e}\n")
