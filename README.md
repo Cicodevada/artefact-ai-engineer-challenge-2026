@@ -36,7 +36,15 @@ Dando uma olhada nos CSVs e no manual de políticas antes de começar a codar, j
 
 ---
 
-## 3. Próximos Passos
-- Ler os CSVs direto no Python ou jogar num SQLite em memória pra facilitar cruzar os dados (ex: cruzar pedido + itens do pedido + cliente). Pandas seria bom, só que posso mostrar que manjo de SQL 
+## 3. Base do chat do gemini
+
+Antes de mexer nos dados e nas funções, fiz a primeira parte só pra ter a base rodando: um chat simples no terminal usando `input()` do Python conectado na API do Gemini usando o SDK, pq ai se eu quiser usar o function calling em breve dá.
+
+- Coloquei um `SYSTEM_PROMPT` inicial bem simples só pra testar a persona do vendedor da Empório da Música.
+
+---
+
+## 4. Próximos Passos
+
+- Montar o esquema dos 2 prompts (Passo 1 decidindo quais funções chamar e Passo 2 respondendo com os dados).
 - Começar a codar as funções `get_politicas`, `get_produtos`, `get_promocoes` e `get_pedidos`.
-- Meter a IA vou usar o gemini pq tem limite free
