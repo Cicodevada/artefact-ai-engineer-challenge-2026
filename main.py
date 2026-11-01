@@ -3,13 +3,14 @@ import json
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+from funcoes import get_politicas, get_produtos, get_promocoes, get_pedidos
 
 load_dotenv()
 
 api_key = os.getenv("GEMINI_API_KEY")
 
 client = genai.Client(api_key=api_key)
-MODEL_ID = "gemini-3.1-flash-lite"
+MODEL_ID = "gemma-4-26b-a4b-it" #Acabou o free do gemini 3.1 mas o gemma é suficiente pra isso kkkk
 
 PROMPT_PASSO_1 = """
 Você é o Hugo Santos, vendedor da loja Empório da Música (loja exclusiva de instrumentos musicais em Campo Grande/MS).
@@ -28,9 +29,19 @@ Funções disponíveis:
    - Use para dúvidas sobre a loja, endereço, telefone, horário de funcionamento, formas de pagamento, parcelamento, desconto no PIX, trocas, devoluções, arrependimento, defeito, frete, entregas, garantia, LGPD ou sobre venda de acessórios (cordas, cabos, palhetas, amplificadores, etc.).
    - Valores aceitos para 'topico': "sobre", "horario", "pagamento", "trocas", "frete", "promocoes", "atendimento", "garantia", "privacidade", "geral".
 
-3. get_produtos(termo_busca)
-   - Use quando o cliente perguntar sobre instrumentos musicais, modelos específicos, tipos de instrumento (ex: "violão", "guitarra", "ukulele", "baixo", "bateria", "teclado", "7 cordas", "nylon", "aço"), faixa de preço ou estoque.
-   - Se o cliente pedir recomendações gerais de uma categoria, passe o nome da categoria ou termo simples (ex: "violão", "ukulele", "Takamine GD20", "todos").
+3. get_produtos(categoria_id)
+   - Use quando o cliente perguntar sobre instrumentos musicais, modelos específicos, tipos de instrumento, faixa de preço ou estoque.
+   - Passe SEMPRE o ID da categoria (ou mais de um separados por vírgula, ex: "1,5", ou "todas").
+   - Categorias disponíveis:
+     1: Guitarras (Guitarras elétricas de todos os estilos, do rock ao jazz)
+     2: Baixos (Baixos elétricos e acústicos para todas as formações)
+     3: Baterias e Percussão (Baterias acústicas, eletrônicas e peças avulsas de percussão)
+     4: Teclados e Pianos (Pianos digitais, sintetizadores, arranjadores e controladores MIDI)
+     5: Violões (Violões clássicos, folk, 7 cordas e eletroacústicos)
+     6: Instrumentos de Sopro - Madeiras (Flautas, clarinetes, saxofones, oboés)
+     7: Instrumentos de Sopro - Metais (Trompetes, trombones, tubas, trompas)
+     8: Cordas Orquestrais (Violinos, violas, violoncelos e contrabaixos acústicos)
+     9: Ukuleles (Ukuleles soprano, concert, tenor e barítono)
 
 4. get_promocoes(termo_busca)
    - Use quando o cliente perguntar sobre promoções, descontos, ofertas, Black Friday, ou quando quiser saber o preço de um produto (para checar se ele está em promoção ativa).
@@ -46,7 +57,7 @@ Exemplo 1 (Cliente diz "Oi, tudo bem?"):
 [{"funcao": "enviar_mensagem", "parametro": "Opa, tudo ótimo por aqui! Sou o Hugo, da Empório da Música. Como posso te ajudar hoje no mundo da música?"}]
 
 Exemplo 2 (Cliente pergunta "Quais violões vocês têm até 1000 reais?"):
-[{"funcao": "enviar_mensagem", "parametro": "Boa! Peraí que vou conferir os violões que temos no estoque nessa faixa de preço pra você!"}, {"funcao": "get_produtos", "parametro": "violão"}, {"funcao": "get_promocoes", "parametro": "todas"}]
+[{"funcao": "enviar_mensagem", "parametro": "Boa! Peraí que vou conferir os violões que temos no estoque nessa faixa de preço pra você!"}, {"funcao": "get_produtos", "parametro": "5"}, {"funcao": "get_promocoes", "parametro": "todas"}]
 
 Exemplo 3 (Cliente pergunta "Qual o endereço e horário da loja?"):
 [{"funcao": "get_politicas", "parametro": "sobre"}, {"funcao": "get_politicas", "parametro": "horario"}]
@@ -95,19 +106,25 @@ def main():
 
             print(f"\n[Passo 1] Hugo (Empório da Música): {acoes}")
 
-            precisa_passo_2 = False
+            mapa_funcoes = {
+                "get_politicas": get_politicas,
+                "get_produtos": get_produtos,
+                "get_promocoes": get_promocoes,
+                "get_pedidos": get_pedidos,
+            }
+
+            dados_retornados = {}
             for acao in acoes:
                 nome_funcao = acao.get("funcao")
-                parametro = acao.get("parametro")
+                parametro = acao.get("parametro", "")
 
                 if nome_funcao == "enviar_mensagem":
                     print(f"\nHugo (Empório da Música): {parametro}\n")
-                else:
-                    precisa_passo_2 = True
-                    print(f" -> [Sistema] Vai executar: {nome_funcao}('{parametro}')")
-
-            if precisa_passo_2:
-                print(" -> [Sistema] (Aqui vamos rodar as funções de dados e chamar o Passo 2!)\n")
+                elif nome_funcao in mapa_funcoes:
+                    print(f" -> [Sistema] Executando: {nome_funcao}('{parametro}')")
+                    resultado = mapa_funcoes[nome_funcao](parametro)
+                    dados_retornados[f"{nome_funcao}({parametro})"] = resultado
+                    print(f" -> [Sistema] Dados retornados de {nome_funcao}('{parametro}'):\n{resultado}\n")
 
             historico.append(
                 types.Content(
