@@ -44,7 +44,21 @@ Antes de mexer nos dados e nas funções, fiz a primeira parte só pra ter a bas
 
 ---
 
-## 4. Próximos Passos
+## 4. Montando o Prompt 1
 
-- Montar o esquema dos 2 prompts (Passo 1 decidindo quais funções chamar e Passo 2 respondendo com os dados).
-- Começar a codar as funções `get_politicas`, `get_produtos`, `get_promocoes` e `get_pedidos`.
+Agora substituí o prompt genérico pelo `PROMPT_PASSO_1`. A ideia dele é simples: a IA recebe o histórico da conversa até o momento, olha a última mensagem do cliente e ela só devolve um JSON dizendo quais funções o nosso código Python precisa rodar e com qual parâmetro:
+- `get_politicas(topico)`
+- `get_produtos(termo_busca)`
+- `get_promocoes(termo_busca)`
+- `get_pedidos(identificador)`
+
+Usei `temperature=0.0` e `response_mime_type="application/json"` na config do Gemini nesse Passo 1 pra garantir que ele não invente moda nem mande texto fora do padrão JSON na hora do Python fazer o `json.loads()`.
+
+Uma coisa que identifiquei, se eu falar apenas "Oi tudo bem" ele chamaria função vazia e iria pro prompt 2 ainda, acho que ele pode ter uma função de enviar mensagem até pra tipo falar "Perai que vou conferir o estoque meu consagrado"
+
+---
+
+## 5. Próximos Passos
+
+- Criar as funções de verdade lendo os arquivos da pasta `data/` (`get_politicas`, `get_produtos`, `get_promocoes` e `get_pedidos`).
+- Montar o Prompt 2 que recebe o retorno dessas funções e dá a resposta final do Hugo pro cliente.
