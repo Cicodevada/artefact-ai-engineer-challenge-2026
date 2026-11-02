@@ -4,7 +4,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
-from funcoes import get_politicas, get_produtos, get_promocoes, get_pedidos
+from funcoes import get_politicas, get_produtos, get_promocoes, get_pedidos, get_categorias
 
 load_dotenv()
 
@@ -38,15 +38,7 @@ Funções disponíveis:
    - Use quando o cliente perguntar sobre instrumentos musicais, modelos específicos, tipos de instrumento, faixa de preço ou estoque.
    - Passe SEMPRE o ID da categoria (ou mais de um separados por vírgula, ex: "1,5", ou "todas").
    - Categorias disponíveis:
-     1: Guitarras (Guitarras elétricas de todos os estilos, do rock ao jazz)
-     2: Baixos (Baixos elétricos e acústicos para todas as formações)
-     3: Baterias e Percussão (Baterias acústicas, eletrônicas e peças avulsas de percussão)
-     4: Teclados e Pianos (Pianos digitais, sintetizadores, arranjadores e controladores MIDI)
-     5: Violões (Violões clássicos, folk, 7 cordas e eletroacústicos)
-     6: Instrumentos de Sopro - Madeiras (Flautas, clarinetes, saxofones, oboés)
-     7: Instrumentos de Sopro - Metais (Trompetes, trombones, tubas, trompas)
-     8: Cordas Orquestrais (Violinos, violas, violoncelos e contrabaixos acústicos)
-     9: Ukuleles (Ukuleles soprano, concert, tenor e barítono)
+""" + get_categorias() + """
 
 4. get_promocoes(termo_busca)
    - Use quando o cliente perguntar sobre promoções, descontos, ofertas, Black Friday, ou quando quiser saber o preço de um produto (para checar se ele está em promoção ativa).
@@ -158,7 +150,7 @@ def main():
 
             # Passo 2: Se buscou dados nas funções, monta a resposta final com base neles
             if len(dados_retornados) > 0:
-                texto_dados = json.dumps(dados_retornados, ensure_ascii=False, indent=2)
+                texto_dados = json.dumps(dados_retornados, ensure_ascii=False)
                 horario_sistema = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
                 prompt_com_dados = (
                     f"[{horario_sistema}] Dados retornados pelas funções do sistema para responder à mensagem do cliente ({mensagem_cliente}):\n"

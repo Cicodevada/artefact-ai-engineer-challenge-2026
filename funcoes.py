@@ -15,6 +15,14 @@ def get_politicas(topico=""):
         return arquivo.read()
 
 
+def get_categorias():
+    categorias = ler_csv("desafio_tecnico_ai_eng - categories.csv")
+    texto = ""
+    for cat in categorias:
+        texto = texto + "     " + cat["category_id"] + ": " + cat["name"] + " (" + cat["description"] + ")\n"
+    return texto.rstrip()
+
+
 def get_produtos(categoria_id=""):
     produtos = ler_csv("desafio_tecnico_ai_eng - products.csv")
 
@@ -39,12 +47,15 @@ def get_promocoes(termo_busca=""):
     promocoes = ler_csv("desafio_tecnico_ai_eng - promotions.csv")
     produtos = ler_csv("desafio_tecnico_ai_eng - products.csv")
 
-    # Coloca o nome do produto dentro da promocao pra facilitar pra IA
+    # Coloca os dados e não só os nomes do produto dentro da promocao pra facilitar pra IA
     for promo in promocoes:
         promo["product_name"] = "Desconhecido"
         for prod in produtos:
             if prod["product_id"] == promo["product_id"]:
                 promo["product_name"] = prod["name"]
+                promo["price_brl"] = prod["price_brl"]
+                promo["stock_quantity"] = prod["stock_quantity"]
+                promo["status"] = prod["status"]
                 break
 
     termo = str(termo_busca).strip().lower()
