@@ -1,105 +1,108 @@
-# Desafio Técnico - Empório da Música
+# Technical Challenge - Empório da Música
 
-## 1. Ideia Inicial
+## 1. Initial Idea
 
-Lendo o desafio e olhando os arquivos na pasta `data/` (os CSVs de produtos, pedidos, clientes, promoções e o manual de políticas da loja), pensei em resolver o problema dividindo o fluxo do agente em duas etapas bem diretas, sem complicar com vários frameworks logo de cara:
+Reading the challenge and looking at the files in the `data/` folder (the CSVs for products, orders, customers, promotions, and the store's policy manual), I thought about solving the problem by splitting the agent's flow into two very straightforward steps, without overcomplicating things with a bunch of frameworks right off the bat:
 
-A ideia é criar funções específicas no Python pra buscar só o que interessa em cada caso:
-- `get_politicas("trocas")` (ou horários, frete, pagamento, etc.) [Esse get_politicas é meio bobo, por mim enviaria a politica inteira, ela é bem pequena no system_prompt só que pra demonstrar o rag talvez vale fazer e bem digamos que economiza um pouquinho de tokens]
+The idea is to create specific functions in Python to fetch only what matters for each case:
+- `get_politicas("trocas")` (or business hours, shipping, payment, etc.) [This `get_politicas` is a bit silly tbh, personally I'd just send the whole policy in the `system_prompt` since it's pretty small, but to demonstrate RAG it might be worth doing, and well, let's say it saves a tiny bit of tokens]
 - `get_produtos("")`
 - `get_promocoes("")`
 - `get_pedidos("")`
 
-### Como vai funcionar a conversa com a IA:
+### How the conversation with the AI is going to work:
 
-**Passo 1 (Descobrir o que buscar):**
-Quando o cliente manda uma mensagem, inicialmente mando pra IA um prompt explicando:
-> "Você é o Hugo Santos, vendedor da loja Empório da Música, seu cliente mandou tal mensagem, responda apenas com as funções que vamos utilizar..."
+**Step 1 (Figuring out what to fetch):**
+When the customer sends a message, I initially send a prompt to the AI explaining:
+> "You are Hugo Santos, a salesperson at Empório da Música, your customer sent this message, reply only with the functions we are going to use..."
 
-**Passo 2 (Pegar os dados e montar a resposta pro usuário):**
-Depois que o Python roda essas funções e pega os dados reais dos arquivos, envio um segundo prompt:
-> "Você é o Hugo Santos, vendedor da loja Empório da Música, seu cliente mandou tal mensagem. Responda apenas com os dados para utilizar (retornados da função), que são esses: [...]"
+**Step 2 (Getting the data and building the reply for the user):**
+After Python runs those functions and grabs the real data from the files, I send a second prompt:
+> "You are Hugo Santos, a salesperson at Empório da Música, your customer sent this message. Reply using only the data provided (returned by the function), which is: [...]"
 
-Assim a IA não inventa preço, não inventa regra de troca e responde só em cima do que as funções retornaram (fazendo o papel do RAG + Function Calling na unha, com total controle do que entra e sai, eu posso usar o SDK do gemini pra fazer o Function Calling real dando os 2 passos em 1, mas sei lá acho que vou manter assim por hora).
+This way the AI doesn't make up prices, doesn't make up exchange rules, and only replies based on what the functions returned (doing the job of RAG + Function Calling from scratch, with full control over what goes in and out. I could use the Gemini SDK to do native Function Calling doing the 2 steps in 1, but idk, I think I'll keep it like this for now).
 
-Tenho que lembrar de colocar o historico da conversa tbm
-
----
-
-## 2. Pontos de atenção que vi até agora
-
-Dando uma olhada nos CSVs e no manual de políticas antes de começar a codar, já deu pra notar algumas coisas que as nossas funções vão precisar tratar:
-- **Promoções (`promotions.csv`):** Tem várias promoções lá, mas a maioria está com `is_active = 0`. A função `get_promocoes` vai precisar checar isso pra não dar desconto que já expirou. Tbm fala que o desconto de 5% no PIX não acumula com promoção.
-- **Produtos (`products.csv`):** Tem produto sem estoque (`stock_quantity = 0`), produto descontinuado (`discontinued`) e produto chegando (`coming_soon`). Também tem uns produtos (tipo alguns baixos e teclados) onde o nome fala uma marca e a descrição fala outra (Real não sei como eu posso corrigir isso, mas é um erro de cadastro, então vou tratar como responsabilidade da loja e não minha e so manter a parada funcionando).
-- **Escopo da loja (`politicas_da_loja.md`):** A loja só vende instrumentos musicais. Não vende acessórios (cordas, palhetas, cabos, cases, pedais, amplificadores). Tenho que ter um bom prompt pra IA não responder qualquer coisa e tallz
+I also have to remember to include the conversation history.
 
 ---
 
-## 3. Base do chat do gemini
+## 2. Things I noticed so far
 
-Antes de mexer nos dados e nas funções, fiz a primeira parte só pra ter a base rodando: um chat simples no terminal usando `input()` do Python conectado na API do Gemini usando o SDK, pq ai se eu quiser usar o function calling em breve dá.
-
-- Coloquei um `SYSTEM_PROMPT` inicial bem simples só pra testar a persona do vendedor da Empório da Música.
+Taking a look at the CSVs and the policy manual before starting to code, I already noticed a few things that our functions will need to handle:
+- **Promotions (`promotions.csv`):** There are several promotions in there, but most of them have `is_active = 0`. The `get_promocoes` function will need to check this so we don't give out expired discounts. It also says that the 5% PIX discount doesn't stack with promotions.
+- **Products (`products.csv`):** There are out-of-stock products (`stock_quantity = 0`), discontinued products (`discontinued`), and products arriving soon (`coming_soon`). There are also some products (like a few basses and keyboards) where the name says one brand and the description says another (I honestly don't know how I'd fix this, it's a catalog registration error, so I'll treat it as the store's responsibility and not mine, and just keep the thing working).
+- **Store scope (`politicas_da_loja.md`):** The store only sells musical instruments. It doesn't sell accessories (strings, picks, cables, cases, pedals, amplifiers). I need a good prompt so the AI doesn't just answer anything and stuff.
 
 ---
 
-## 4. Montando o Prompt 1
+## 3. Base Gemini chat
 
-Agora substituí o prompt genérico pelo `PROMPT_PASSO_1`. A ideia dele é simples: a IA recebe o histórico da conversa até o momento, olha a última mensagem do cliente e ela só devolve um JSON dizendo quais funções o nosso código Python precisa rodar e com qual parâmetro:
+Before touching the data and the functions, I built the first part just to have the base running: a simple terminal chat using Python's `input()` connected to the Gemini API using the SDK, because then if I want to use function calling later on, it's easy.
+
+- I put a very simple initial `SYSTEM_PROMPT` just to test the Empório da Música salesperson persona.
+
+---
+
+## 4. Building Prompt 1
+
+Now I replaced the generic prompt with `PROMPT_PASSO_1`. The idea behind it is simple: the AI gets the conversation history so far, looks at the customer's last message, and only returns a JSON telling which functions our Python code needs to run and with what parameter:
 - `get_politicas(topico)`
 - `get_produtos(categoria_id)`
 - `get_promocoes(termo_busca)`
 - `get_pedidos(identificador)`
 
-Usei `temperature=0.0` e `response_mime_type="application/json"` na config do Gemini nesse Passo 1 pra garantir que ele não invente moda nem mande texto fora do padrão JSON na hora do Python fazer o `json.loads()`.
+I used `temperature=0.0` and `response_mime_type="application/json"` in Gemini's config for Step 1 to make sure it doesn't get creative or send text outside the JSON format when Python runs `json.loads()` (Note: later when switching to Gemma due to free tier limits on Gemini 3.1, I removed the `response_mime_type` since Gemma doesn't support it natively in the API and handled the markdown strip in Python).
 
-Uma coisa que identifiquei, se eu falar apenas "Oi tudo bem" ele chamaria função vazia e iria pro prompt 2 ainda, acho que ele pode ter uma função de enviar mensagem até pra tipo falar "Perai que vou conferir o estoque meu consagrado" enquanto busca os dados, ou já responder direto no Passo 1 sem gastar outra chamada de API quando for só um "Oi, tudo bem?" ou alguma coisa que não precisa consultar tabela nenhuma.
+One thing I noticed: if I just say "Hi how are you", it would call an empty function and still go to Prompt 2. I figured it should have a send message function, even to say things like "Hold on, let me check the stock for you my friend" while it fetches the data, or just reply directly in Step 1 without wasting another API call when it's just a "Hi, how are you?" or something that doesn't need to query any table.
 
-Outra coisa que pensei pro `get_produtos`: ao invés de buscar produto por texto (que pode dar ruim se o cliente digitar "violões" no plural ou errar o nome), criei a função `get_categorias()` no `funcoes.py` que lê o `categories.csv` e já injeta direto no `PROMPT_PASSO_1` (`... - Categorias disponíveis: + get_categorias() + ...`). Assim a IA sempre passa o ID da categoria pro `get_produtos("5")`, e caso a loja adicione novas categorias na tabela a IA já puxa automático sem precisar ficar mexendo no prompt
-
----
-
-## 5. Criando as funções (`funcoes.py`) e o Passo 2
-
-Criei o `funcoes.py` lendo os CSVs direto com a biblioteca nativa `csv` do Python:
-- `get_politicas`: Como o manual de políticas é pequeno, deixei retornando o `.md` inteiro quando a IA pede pra consultar política, assim não corre risco de cortar alguma regra importante pela metade.
-- `get_categorias`: Puxa os IDs, nomes e descrições do `categories.csv` pra montar o prompt dinamicamente.
-- `get_produtos`: Filtra os produtos pelos IDs de categoria que a IA pediu.
-- `get_promocoes`: Puxa as promoções e já cruza com o `products.csv` pra colocar o nome do produto junto (`product_name`) e facilitar pra IA entender de qual instrumento é aquela promoção.
-- `get_pedidos`: Busca pelo ID do pedido, código de rastreio, nome, email ou telefone do cliente, e já junta os dados do cliente (`customers.csv`) e os itens comprados (`order_items.csv` + `products.csv`).
-
-Depois fechei o `PROMPT_PASSO_2`: quando o Passo 1 chama alguma função de busca, o Python pega o dicionário com os retornos, joga pro Passo 2 junto com o histórico da conversa e pede pra IA responder ao cliente usando só aqueles dados.
-
-Um detalhe que percebi testando foi a continuidade da conversa: em todas as mensagens ele tava respondendo "Fala, tudo bem? Aqui é o Hugo". Pra resolver isso, passei a enviar o horário (`datetime`) em todas as mensagens do histórico e coloquei uma regra nos dois prompts falando pra ele só se apresentar se for a primeira mensagem da conversa ou se já tiver passado muito tempo.
+Another thing I thought about for `get_produtos`: instead of searching for a product by text (which can go wrong if the customer types "violões" in the plural or misspells the name), I created the `get_categorias()` function in `funcoes.py` that reads `categories.csv` and injects it straight into `PROMPT_PASSO_1` (`... - Categorias disponíveis: + get_categorias() + ...`). That way the AI always passes the category ID to `get_produtos("5")`, and if the store adds new categories to the spreadsheet, the AI pulls them automatically without having to touch the prompt.
 
 ---
 
-## 6. Como rodar o projeto
+## 5. Creating the functions (`funcoes.py`) and Step 2
 
-1. Clone o repositório e entre na pasta do projeto.
-2. Crie um ambiente virtual (opcional) e instale as dependências:
+I created `funcoes.py` reading the CSVs directly with Python's native `csv` library:
+- `get_politicas`: Since the policy manual is small, I left it returning the whole `.md` when the AI asks to check the policies, so there's no risk of cutting an important rule in half.
+- `get_categorias`: Pulls the IDs, names, and descriptions from `categories.csv` to build the prompt dynamically.
+- `get_produtos`: Filters the products by the category IDs that the AI requested.
+- `get_promocoes`: Pulls the promotions and cross-references them with `products.csv` to attach the product info (`product_name`, `price_brl`, `stock_quantity`, `status`) so it's easier for the AI to understand which instrument that promotion belongs to.
+- `get_pedidos`: Searches by order ID, tracking code, customer name, email, or phone number, and joins the customer data (`customers.csv`) and the purchased items (`order_items.csv` + `products.csv`).
+
+Then I wrapped up `PROMPT_PASSO_2`: when Step 1 calls any search function, Python takes the dictionary with the returned data, sends it to Step 2 along with the conversation history, and asks the AI to reply to the customer using only that data.
+
+One detail I noticed while testing was conversation continuity: in every single message it was replying "Hey, how's it going? This is Hugo". To fix this, I started sending the timestamp (`datetime`) on every message in the history and added a rule in both prompts telling it to only introduce itself if it's the very first message of the conversation or if a lot of time has passed.
+
+---
+
+## 6. How to run the project
+
+1. Clone the repository and enter the project folder.
+2. Create a virtual environment (optional) and install the dependencies:
 ```bash
 pip install -r requirements.txt
 ```
-3. Crie um arquivo `.env` na raiz do projeto (baseado no `.env.example`) e coloque sua chave da API do Google Gemini:
+3. Create a `.env` file in the project root (based on `.env.example`) and put your Google Gemini API key:
 ```env
-GEMINI_API_KEY=sua_chave_aqui
+GEMINI_API_KEY=your_key_here
 ```
-4. Execute o chat no terminal:
+4. Run the chat in the terminal:
 ```bash
 python main.py
 ```
 
----
-
-## 7. Limitações conhecidas e o que eu faria com mais tempo
-
-- **Histórico em memória:** Atualmente o histórico da conversa fica salvo na lista `historico` enquanto o `main.py` está rodando. Se fechar o script, a conversa zera. Com mais tempo, salvaria o histórico em um arquivo JSON ou banco SQL separado por cliente/sessão.
-- **Volume de dados nos CSVs:** Como o catálogo atual da loja nos CSVs tem poucos produtos por categoria, mandar todos os produtos da categoria escolhida pro Passo 2 funciona super bem e não permite que a IA perca nenhum item. Se a loja crescesse pra milhares de produtos na mesma categoria, eu passaria esses CSVs pra um banco SQLite/PostgreSQL e deixaria a função filtrar também por faixa de preço (`preco_max`, `preco_min`) direto na query.
-- **Inconsistência nos dados de cadastro:** Alguns produtos na tabela `products.csv` têm divergência entre o título e a descrição (ex: baixo com nome Music Man e descrição falando Fender). Mantive o agente lendo os dados originais da loja, mas num cenário real criaria uma rotina de validação/limpeza do catálogo junto com a equipe da loja.
+*(Interaction examples can be found in `exemplo_interacao.md`)*.
 
 ---
 
-## 8. Uso de Assistentes de IA
+## 7. Known limitations and what I would do with more time
 
-Utilizei assistente de IA (Cico Coding https://cico.diy) que foi desenvolvido por mim mesmo, como parceiro pra discutir a arquitetura, revisar regras de negócio escondidas nos CSVs, estruturar os textos dos prompts e agilizar a escrita do boilerplate em Python, mantendo toda a decisão da lógica em 2 passos, criação das funções (`enviar_mensagem`, `get_categorias`, filtros por ID) e ajustes de comportamento na minha mão.
+- **More info in the base prompt:** Give a bit more basic store info to the AI and tweak the prompts so that sometimes it doesn't even need to trigger the RAG, though I'd test this out to see the best balance. Because for example, right now sometimes it goes "Hold on let me check if there's a PIX discount" -> Calls Policy Function -> "Yes, there's 5%", when that could be more direct, you know? But as a prototype I think it's solid.
+- **In-memory history:** Right now the conversation history is saved in the `historico` list while `main.py` is running. If you close the script, the conversation resets. With more time, I would save the history in a JSON file or SQL database separated by customer/session.
+- **Data volume in the CSVs:** Since the store's current catalog in the CSVs only has a few products per category, sending all products from the chosen category to Step 2 works great and ensures the AI doesn't miss any item. If the store grew to thousands of products in the same category, I would move these CSVs to a SQLite/PostgreSQL database and let the function filter by price range (`max_price`, `min_price`) directly in the query.
+- **Data inconsistency in the catalog:** Some products in the `products.csv` table have a mismatch between the title and the description (e.g., a bass named Music Man with a description talking about Fender). I kept the agent reading the store's original data, but in a real-world scenario I would create a catalog validation/cleaning routine with the store's team.
+
+---
+
+## 8. Use of AI Assistants
+
+I used an AI assistant (Cico Coding https://cico.diy), which was developed by myself, as a coding partner to discuss the architecture, review business rules hidden in the CSVs, structure the prompt texts, and speed up writing the Python boilerplate, while keeping all the decisions around the 2-step logic, function design (`enviar_mensagem`, `get_categorias`, ID filtering), and behavior tweaks in my own hands.
